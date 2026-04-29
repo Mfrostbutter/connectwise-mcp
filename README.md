@@ -1,6 +1,6 @@
 # ConnectWise Live MCP Server
 
-FastMCP HTTP server wrapping the ConnectWise Manage REST API. 31 tools across Service, Operations, and Finance domains. Finance tools are gated behind `CW_TIER=leadership` so you can expose a restricted manifest to non-finance users.
+FastMCP HTTP server wrapping the ConnectWise Manage REST API. 38 tools across Service, Operations, and Finance domains. Finance tools are gated behind `CW_TIER=leadership` so you can expose a restricted manifest to non-finance users.
 
 ## Quick start
 
@@ -30,11 +30,11 @@ python3 server.py
 
 ## Tools
 
-**Service (11):** `get_ticket`, `search_tickets`, `get_open_tickets`, `add_ticket_note`, `create_ticket`, `update_ticket_status`, `get_boards`, `get_board_statuses`, `get_ticket_time`, `search_cw_kb_articles`, `get_ticket_count`
+**Service (12):** `get_ticket`, `search_tickets`, `get_open_tickets`, `add_ticket_note`, `create_ticket`, `update_ticket_status`, `get_boards`, `get_board_statuses`, `get_priorities`, `get_ticket_time`, `search_cw_kb_articles`, `get_ticket_count`
 
-**Operations (10):** `get_company`, `search_companies`, `get_contacts`, `get_configurations`, `get_configuration`, `get_projects`, `get_project_tickets`, `get_time_entries`, `log_time`, `get_members`
+**Operations (15):** `get_company`, `search_companies`, `get_contacts`, `get_configurations`, `get_configuration`, `get_projects`, `get_project_tickets`, `get_time_entries`, `log_time`, `get_members`, `get_company_types`, `get_company_statuses`, `get_configuration_statuses`, `get_work_types`, `get_project_statuses`
 
-**Finance (10, leadership only):** `get_invoices`, `get_invoice`, `get_agreements`, `get_agreement`, `get_agreement_additions`, `get_agreement_count_by_type`, `get_client_mrr`, `get_aging_invoices`, `get_opportunities`, `create_opportunity`
+**Finance (11, leadership only):** `get_invoices`, `get_invoice`, `get_agreements`, `get_agreement`, `get_agreement_types`, `get_agreement_additions`, `get_agreement_count_by_type`, `get_client_mrr`, `get_aging_invoices`, `get_opportunities`, `create_opportunity`
 
 ## Claude Desktop / Claude Code configuration
 

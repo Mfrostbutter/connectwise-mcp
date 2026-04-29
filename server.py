@@ -418,7 +418,7 @@ def create_ticket(
     company_id: int,
     summary: str,
     board_name: str,
-    priority_name: str = "Medium",
+    priority_name: str = "",
     description: str = "",
     assigned_tech: str = "",
     contact_id: int = 0,
@@ -433,7 +433,7 @@ def create_ticket(
         company_id: CW company ID (use get_company to look up)
         summary: Ticket summary/title
         board_name: Service board name (e.g. "Service Board", "Network")
-        priority_name: Priority name (default "Medium")
+        priority_name: Priority name (use get_priorities to see valid values)
         description: Initial description text (optional)
         assigned_tech: Tech identifier to assign (optional)
         contact_id: Contact ID to link (optional)
@@ -442,8 +442,9 @@ def create_ticket(
         "summary": summary,
         "company": {"id": company_id},
         "board": {"name": board_name},
-        "priority": {"name": priority_name},
     }
+    if priority_name:
+        body["priority"] = {"name": priority_name}
     if description:
         body["initialDescription"] = description
     if assigned_tech:
@@ -529,6 +530,32 @@ def get_board_statuses(board_id: int) -> str:
             f"| {s.get('id')} | {s.get('name', '—')} "
             f"| {'Yes' if s.get('closedStatus') else 'No'} "
             f"| {s.get('escalationStatus', '—')} |"
+        )
+
+    return "\n".join(out)
+
+
+@mcp.tool()
+def get_priorities() -> str:
+    """
+    List all ticket priority levels configured in ConnectWise.
+
+    Use before create_ticket or search_tickets when you need valid priority names.
+    Returns: ID, name, level, sort order, default flag.
+    """
+    priorities = cw_paginate("/service/priorities", fields="id,name,level,sortOrder,defaultFlag")
+    if not priorities:
+        return "No priorities found."
+
+    out = [f"Found {len(priorities)} priority level(s):", "", "| ID | Name | Level | Sort | Default |"]
+    out.append("|----|------|-------|------|---------|")
+    for p in sorted(priorities, key=lambda x: x.get("sortOrder", 0)):
+        out.append(
+            f"| {p.get('id')} "
+            f"| {p.get('name', '—')} "
+            f"| {p.get('level', '—')} "
+            f"| {p.get('sortOrder', '—')} "
+            f"| {'Yes' if p.get('defaultFlag') else 'No'} |"
         )
 
     return "\n".join(out)
@@ -714,15 +741,15 @@ def get_company(company_id: int = 0, company_name: str = "") -> str:
 
 @mcp.tool()
 def search_companies(
-    status: str = "Active",
-    company_type: str = "Client",
+    status: str = "",
+    company_type: str = "",
     limit: int = 50,
     offset: int = 0,
 ) -> str:
     """
     List ConnectWise companies with optional status and type filters.
 
-    Defaults to Active Clients. Pass status="" or company_type="" to remove that filter.
+    All filters optional. Use get_company_types and get_company_statuses to see valid values for your instance.
     Returns: ID, name, status, phone, website, territory.
     """
     status = _safe_str(status)
@@ -809,7 +836,7 @@ def get_configurations(
     company_id: int = 0,
     company_name: str = "",
     config_type: str = "",
-    status: str = "Active",
+    status: str = "",
     limit: int = 50,
     offset: int = 0,
 ) -> str:
@@ -1143,6 +1170,130 @@ def get_members(include_inactive: bool = False) -> str:
     return "\n".join(out)
 
 
+@mcp.tool()
+def get_company_types() -> str:
+    """
+    List all company types configured in ConnectWise (e.g. Client, Prospect, Vendor).
+
+    Use before search_companies when you need valid type names for your instance.
+    """
+    types = cw_paginate("/company/companies/types", fields="id,name,defaultFlag,vendorFlag")
+    if not types:
+        return "No company types found."
+
+    out = [f"Found {len(types)} company type(s):", "", "| ID | Name | Default | Vendor |"]
+    out.append("|----|------|---------|--------|")
+    for t in sorted(types, key=lambda x: x.get("name", "")):
+        out.append(
+            f"| {t.get('id')} "
+            f"| {t.get('name', '—')} "
+            f"| {'Yes' if t.get('defaultFlag') else 'No'} "
+            f"| {'Yes' if t.get('vendorFlag') else 'No'} |"
+        )
+
+    return "\n".join(out)
+
+
+@mcp.tool()
+def get_company_statuses() -> str:
+    """
+    List all company statuses configured in ConnectWise (e.g. Active, Inactive).
+
+    Use before search_companies when you need valid status names for your instance.
+    """
+    statuses = cw_paginate("/company/companies/statuses", fields="id,name,defaultFlag,inactiveFlag")
+    if not statuses:
+        return "No company statuses found."
+
+    out = [f"Found {len(statuses)} company status(es):", "", "| ID | Name | Default | Inactive |"]
+    out.append("|----|------|---------|----------|")
+    for s in sorted(statuses, key=lambda x: x.get("name", "")):
+        out.append(
+            f"| {s.get('id')} "
+            f"| {s.get('name', '—')} "
+            f"| {'Yes' if s.get('defaultFlag') else 'No'} "
+            f"| {'Yes' if s.get('inactiveFlag') else 'No'} |"
+        )
+
+    return "\n".join(out)
+
+
+@mcp.tool()
+def get_configuration_statuses() -> str:
+    """
+    List all configuration/asset statuses configured in ConnectWise.
+
+    Use before get_configurations when you need valid status values for your instance.
+    Note: configuration statuses use a 'description' field rather than 'name'.
+    """
+    statuses = cw_paginate("/company/configurations/statuses", fields="id,description,closedFlag,defaultFlag")
+    if not statuses:
+        return "No configuration statuses found."
+
+    out = [f"Found {len(statuses)} configuration status(es):", "", "| ID | Description | Closed | Default |"]
+    out.append("|----|-------------|--------|---------|")
+    for s in sorted(statuses, key=lambda x: x.get("description", "")):
+        out.append(
+            f"| {s.get('id')} "
+            f"| {s.get('description', '—')} "
+            f"| {'Yes' if s.get('closedFlag') else 'No'} "
+            f"| {'Yes' if s.get('defaultFlag') else 'No'} |"
+        )
+
+    return "\n".join(out)
+
+
+@mcp.tool()
+def get_work_types(include_inactive: bool = False) -> str:
+    """
+    List work types configured in ConnectWise.
+
+    Use before log_time when you need valid work_type_name values for your instance.
+    Returns: ID, name, bill time option, default flag.
+    """
+    conditions = None if include_inactive else "inactiveFlag=false"
+    work_types = cw_paginate("/time/workTypes", conditions=conditions, fields="id,name,billTime,overallDefaultFlag,inactiveFlag")
+    if not work_types:
+        return "No work types found."
+
+    out = [f"Found {len(work_types)} work type(s):", "", "| ID | Name | Bill Time | Default |"]
+    out.append("|----|------|-----------|---------|")
+    for w in sorted(work_types, key=lambda x: x.get("name", "")):
+        out.append(
+            f"| {w.get('id')} "
+            f"| {w.get('name', '—')} "
+            f"| {w.get('billTime', '—')} "
+            f"| {'Yes' if w.get('overallDefaultFlag') else 'No'} |"
+        )
+
+    return "\n".join(out)
+
+
+@mcp.tool()
+def get_project_statuses() -> str:
+    """
+    List all project statuses configured in ConnectWise.
+
+    Use before get_projects when you need valid status names for your instance.
+    """
+    statuses = cw_paginate("/project/statuses", fields="id,name,defaultFlag,closedFlag,inactiveFlag")
+    if not statuses:
+        return "No project statuses found."
+
+    out = [f"Found {len(statuses)} project status(es):", "", "| ID | Name | Default | Closed | Inactive |"]
+    out.append("|----|------|---------|--------|----------|")
+    for s in sorted(statuses, key=lambda x: x.get("name", "")):
+        out.append(
+            f"| {s.get('id')} "
+            f"| {s.get('name', '—')} "
+            f"| {'Yes' if s.get('defaultFlag') else 'No'} "
+            f"| {'Yes' if s.get('closedFlag') else 'No'} "
+            f"| {'Yes' if s.get('inactiveFlag') else 'No'} |"
+        )
+
+    return "\n".join(out)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # FINANCE DOMAIN — Invoices, agreements, MRR, opportunities
 # Only registered when CW_TIER=leadership
@@ -1345,6 +1496,31 @@ if FINANCE_ENABLED:
         ]
 
         return "\n".join(lines)
+
+    @mcp.tool()
+    def get_agreement_types() -> str:
+        """
+        List all agreement types configured in ConnectWise.
+
+        Use before get_agreements when you need valid type names for your instance.
+        Returns: ID, name, default flag, inactive flag, one-time flag.
+        """
+        types = cw_paginate("/finance/agreements/types", fields="id,name,defaultFlag,inactiveFlag,oneTimeFlag")
+        if not types:
+            return "No agreement types found."
+
+        out = [f"Found {len(types)} agreement type(s):", "", "| ID | Name | Default | Inactive | One-Time |"]
+        out.append("|----|------|---------|----------|----------|")
+        for t in sorted(types, key=lambda x: x.get("name", "")):
+            out.append(
+                f"| {t.get('id')} "
+                f"| {t.get('name', '—')} "
+                f"| {'Yes' if t.get('defaultFlag') else 'No'} "
+                f"| {'Yes' if t.get('inactiveFlag') else 'No'} "
+                f"| {'Yes' if t.get('oneTimeFlag') else 'No'} |"
+            )
+
+        return "\n".join(out)
 
     @mcp.tool()
     def get_agreement_additions(agreement_id: int, include_cancelled: bool = False) -> str:
