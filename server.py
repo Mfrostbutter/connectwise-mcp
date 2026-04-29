@@ -1274,7 +1274,7 @@ def get_project_statuses() -> str:
     """
     List all project statuses configured in ConnectWise.
 
-    Use before get_projects when you need valid status names for your instance.
+    Use before create_project or update_project when you need valid status names.
     """
     statuses = cw_paginate("/project/statuses", fields="id,name,defaultFlag,closedFlag,inactiveFlag")
     if not statuses:
@@ -1292,6 +1292,180 @@ def get_project_statuses() -> str:
         )
 
     return "\n".join(out)
+
+
+@mcp.tool()
+def create_project(
+    name: str,
+    company_id: int,
+    board_name: str,
+    billing_method: str,
+    estimated_start: str,
+    estimated_end: str,
+    description: str = "",
+    manager_identifier: str = "",
+    status_name: str = "",
+    estimated_hours: float = 0.0,
+) -> str:
+    """
+    Create a new project in ConnectWise.
+
+    Args:
+        name: Project name
+        company_id: CW company ID (use get_company to look up)
+        board_name: Project board name (use get_boards to see options)
+        billing_method: "ActualRates", "FixedFee", "NotToExceed", or "OverrideRate"
+        estimated_start: YYYY-MM-DD
+        estimated_end: YYYY-MM-DD
+        description: Project description (optional)
+        manager_identifier: CW member identifier for project manager (optional)
+        status_name: Project status (use get_project_statuses; defaults to CW default if omitted)
+        estimated_hours: Estimated hours budget (optional)
+    """
+    body: dict = {
+        "name": name,
+        "company": {"id": company_id},
+        "board": {"name": board_name},
+        "billingMethod": billing_method,
+        "estimatedStart": f"{estimated_start}T00:00:00Z",
+        "estimatedEnd": f"{estimated_end}T00:00:00Z",
+    }
+    if description:
+        body["description"] = description
+    if manager_identifier:
+        body["manager"] = {"identifier": manager_identifier}
+    if status_name:
+        body["status"] = {"name": status_name}
+    if estimated_hours:
+        body["estimatedHours"] = estimated_hours
+
+    try:
+        result = cw_post("/project/projects", body)
+        pid = result.get("id", "?")
+        return (
+            f"Project #{pid} created: {name}\n"
+            f"Company ID: {company_id} | Board: {board_name} | Billing: {billing_method}\n"
+            f"Dates: {estimated_start} → {estimated_end}"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Failed to create project: %s", e, exc_info=True)
+        return "Failed to create project. Check server logs for details."
+
+
+@mcp.tool()
+def update_project(
+    project_id: int,
+    status_name: str = "",
+    percent_complete: int = -1,
+    scheduled_end: str = "",
+    description: str = "",
+    manager_identifier: str = "",
+) -> str:
+    """
+    Update fields on an existing project.
+
+    Only include the fields you want to change — unset fields are ignored.
+
+    Args:
+        project_id: The CW project ID
+        status_name: New status (use get_project_statuses for valid values)
+        percent_complete: Override percent complete (0–100; -1 = leave unchanged)
+        scheduled_end: New scheduled end date YYYY-MM-DD (optional)
+        description: Updated description (optional)
+        manager_identifier: New project manager CW identifier (optional)
+    """
+    operations = []
+    if status_name:
+        operations.append({"op": "replace", "path": "/status", "value": {"name": status_name}})
+    if percent_complete >= 0:
+        operations.append({"op": "replace", "path": "/percentComplete", "value": percent_complete})
+        operations.append({"op": "replace", "path": "/overridePercentComplete", "value": True})
+    if scheduled_end:
+        operations.append({"op": "replace", "path": "/scheduledEnd", "value": f"{scheduled_end}T00:00:00Z"})
+    if description:
+        operations.append({"op": "replace", "path": "/description", "value": description})
+    if manager_identifier:
+        operations.append({"op": "replace", "path": "/manager", "value": {"identifier": manager_identifier}})
+
+    if not operations:
+        return "No fields specified to update."
+
+    try:
+        result = cw_patch(f"/project/projects/{project_id}", operations)
+        name = result.get("name", "—")
+        new_status = _n(result, "status", "name")
+        return f"Project #{project_id} updated — {name} | Status: {new_status}"
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Failed to update project %s: %s", project_id, e, exc_info=True)
+        return "Failed to update project. Check server logs for details."
+
+
+@mcp.tool()
+def add_project_phase(
+    project_id: int,
+    description: str,
+    scheduled_start: str = "",
+    scheduled_end: str = "",
+    scheduled_hours: float = 0.0,
+    notes: str = "",
+    status_name: str = "",
+) -> str:
+    """
+    Add a phase to an existing project.
+
+    Args:
+        project_id: The CW project ID
+        description: Phase name/description
+        scheduled_start: YYYY-MM-DD (optional)
+        scheduled_end: YYYY-MM-DD (optional)
+        scheduled_hours: Scheduled hours for this phase (optional)
+        notes: Internal notes (optional)
+        status_name: Phase status (optional; uses project board default if omitted)
+    """
+    body: dict = {"description": description, "projectId": project_id}
+    if scheduled_start:
+        body["scheduledStart"] = f"{scheduled_start}T00:00:00Z"
+    if scheduled_end:
+        body["scheduledEnd"] = f"{scheduled_end}T00:00:00Z"
+    if scheduled_hours:
+        body["scheduledHours"] = scheduled_hours
+    if notes:
+        body["notes"] = notes
+    if status_name:
+        body["status"] = {"name": status_name}
+
+    try:
+        result = cw_post(f"/project/projects/{project_id}/phases", body)
+        phase_id = result.get("id", "?")
+        return f"Phase #{phase_id} added to project #{project_id}: {description}"
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Failed to add phase to project %s: %s", project_id, e, exc_info=True)
+        return "Failed to add project phase. Check server logs for details."
+
+
+@mcp.tool()
+def add_project_note(project_id: int, text: str, internal: bool = True) -> str:
+    """
+    Add a note to a project.
+
+    Args:
+        project_id: The CW project ID
+        text: Note content
+        internal: True for internal note (default), False for external/client-visible
+    """
+    body = {"text": text, "internalFlag": internal}
+    try:
+        result = cw_post(f"/project/projects/{project_id}/notes", body)
+        note_id = result.get("id", "?")
+        note_type = "internal" if internal else "external"
+        return f"Note #{note_id} added to project #{project_id} ({note_type})."
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Failed to add note to project %s: %s", project_id, e, exc_info=True)
+        return "Failed to add project note. Check server logs for details."
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1521,6 +1695,160 @@ if FINANCE_ENABLED:
             )
 
         return "\n".join(out)
+
+    @mcp.tool()
+    def create_agreement(
+        name: str,
+        type_name: str,
+        company_id: int,
+        contact_id: int,
+        start_date: str = "",
+        end_date: str = "",
+        no_ending_date: bool = False,
+        bill_amount: float = 0.0,
+        period_type: str = "",
+        internal_notes: str = "",
+    ) -> str:
+        """
+        Create a new agreement (managed service contract) in ConnectWise.
+
+        Args:
+            name: Agreement name
+            type_name: Agreement type (use get_agreement_types for valid values)
+            company_id: CW company ID (use get_company to look up)
+            contact_id: CW contact ID (use get_contacts to look up)
+            start_date: YYYY-MM-DD (optional)
+            end_date: YYYY-MM-DD (optional; not required if no_ending_date=True)
+            no_ending_date: Set True for open-ended agreements (optional)
+            bill_amount: Recurring bill amount per period (optional)
+            period_type: "Monthly", "Quarterly", "Semi-Annually", "Yearly", or "One-Time" (optional)
+            internal_notes: Internal notes on the agreement (optional)
+        """
+        body: dict = {
+            "name": name,
+            "type": {"name": type_name},
+            "company": {"id": company_id},
+            "contact": {"id": contact_id},
+        }
+        if start_date:
+            body["startDate"] = f"{start_date}T00:00:00Z"
+        if no_ending_date:
+            body["noEndingDateFlag"] = True
+        elif end_date:
+            body["endDate"] = f"{end_date}T00:00:00Z"
+        if bill_amount:
+            body["billAmount"] = bill_amount
+        if period_type:
+            body["periodType"] = period_type
+        if internal_notes:
+            body["internalNotes"] = internal_notes
+
+        try:
+            result = cw_post("/finance/agreements", body)
+            agr_id = result.get("id", "?")
+            return (
+                f"Agreement #{agr_id} created: {name}\n"
+                f"Type: {type_name} | Company ID: {company_id}"
+                + (f" | Bill: {_dollar(bill_amount)}/{period_type}" if bill_amount else "")
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to create agreement: %s", e, exc_info=True)
+            return "Failed to create agreement. Check server logs for details."
+
+    @mcp.tool()
+    def update_agreement(
+        agreement_id: int,
+        cancelled: bool | None = None,
+        bill_amount: float = -1.0,
+        end_date: str = "",
+        no_ending_date: bool | None = None,
+        internal_notes: str = "",
+    ) -> str:
+        """
+        Update an existing agreement.
+
+        Only include fields you want to change — unset fields are ignored.
+
+        Args:
+            agreement_id: The CW agreement ID
+            cancelled: Set True to cancel the agreement, False to un-cancel
+            bill_amount: New recurring bill amount (-1 = leave unchanged)
+            end_date: New end date YYYY-MM-DD (optional)
+            no_ending_date: Set True to remove the end date (open-ended)
+            internal_notes: Replace internal notes (optional)
+        """
+        operations = []
+        if cancelled is not None:
+            operations.append({"op": "replace", "path": "/cancelledFlag", "value": cancelled})
+        if bill_amount >= 0:
+            operations.append({"op": "replace", "path": "/billAmount", "value": bill_amount})
+        if no_ending_date:
+            operations.append({"op": "replace", "path": "/noEndingDateFlag", "value": True})
+        elif end_date:
+            operations.append({"op": "replace", "path": "/endDate", "value": f"{end_date}T00:00:00Z"})
+        if internal_notes:
+            operations.append({"op": "replace", "path": "/internalNotes", "value": internal_notes})
+
+        if not operations:
+            return "No fields specified to update."
+
+        try:
+            result = cw_patch(f"/finance/agreements/{agreement_id}", operations)
+            agr_name = result.get("name", "—")
+            return f"Agreement #{agreement_id} updated — {agr_name}"
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to update agreement %s: %s", agreement_id, e, exc_info=True)
+            return "Failed to update agreement. Check server logs for details."
+
+    @mcp.tool()
+    def add_agreement_addition(
+        agreement_id: int,
+        product_identifier: str,
+        bill_customer: bool = True,
+        quantity: float = 1.0,
+        unit_price: float = 0.0,
+        effective_date: str = "",
+        description: str = "",
+    ) -> str:
+        """
+        Add a line item (addition) to an agreement.
+
+        Args:
+            agreement_id: The CW agreement ID
+            product_identifier: CW product identifier/SKU
+            bill_customer: Whether to bill this line to the customer (default True)
+            quantity: Quantity (default 1.0)
+            unit_price: Unit price in dollars (optional; uses product default if 0)
+            effective_date: When this addition takes effect YYYY-MM-DD (optional; defaults to today)
+            description: Override description (optional; uses product description if omitted)
+        """
+        body: dict = {
+            "product": {"identifier": product_identifier},
+            "billCustomer": bill_customer,
+            "quantity": quantity,
+        }
+        if unit_price:
+            body["unitPrice"] = unit_price
+        if effective_date:
+            body["effectiveDate"] = f"{effective_date}T00:00:00Z"
+        if description:
+            body["description"] = description
+
+        try:
+            result = cw_post(f"/finance/agreements/{agreement_id}/additions", body)
+            addition_id = result.get("id", "?")
+            line_total = quantity * unit_price if unit_price else 0
+            return (
+                f"Addition #{addition_id} added to agreement #{agreement_id}: {product_identifier}\n"
+                f"Qty: {quantity} | Unit: {_dollar(unit_price)} | Bill: {'Yes' if bill_customer else 'No'}"
+                + (f" | Total: {_dollar(line_total)}" if line_total else "")
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to add addition to agreement %s: %s", agreement_id, e, exc_info=True)
+            return "Failed to add agreement addition. Check server logs for details."
 
     @mcp.tool()
     def get_agreement_additions(agreement_id: int, include_cancelled: bool = False) -> str:
