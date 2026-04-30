@@ -2,11 +2,24 @@
 
 FastMCP HTTP server wrapping the ConnectWise Manage REST API. 45 tools across Service, Operations, and Finance domains. Finance tools are gated behind `CW_TIER=leadership` so you can expose a restricted manifest to non-finance users.
 
-## Quick start
+## Installation
 
+**Via uvx (recommended — no clone, no venv):**
 ```bash
-git clone <this-repo>
-cd connectwise-live
+uvx connectwise-mcp
+```
+Set credentials via environment variables or a `.env` file in your working directory.
+
+**Via pip:**
+```bash
+pip install connectwise-mcp
+connectwise-mcp
+```
+
+**From source:**
+```bash
+git clone https://github.com/Mfrostbutter/connectwise-mcp
+cd connectwise-mcp
 cp .env.example .env
 # fill in your CW_* credentials
 python3 -m venv venv && source venv/bin/activate
@@ -14,6 +27,15 @@ pip install -r requirements.txt
 python3 server.py
 # verify: curl http://localhost:8085/health
 ```
+
+## Transport modes
+
+| Mode | How to set | Best for |
+|------|-----------|----------|
+| `http` (default) | `MCP_TRANSPORT=http` | Persistent server shared across sessions or team members |
+| `stdio` | `MCP_TRANSPORT=stdio` | Cursor, VS Code, Zed, Continue, or any stdio-based MCP client |
+
+In stdio mode the server is spawned per-session by the client — no port, no persistent process.
 
 ## Environment variables
 
@@ -36,36 +58,39 @@ python3 server.py
 
 **Finance (14, leadership only):** `get_invoices`, `get_invoice`, `get_agreements`, `get_agreement`, `get_agreement_types`, `create_agreement`, `update_agreement`, `add_agreement_addition`, `get_agreement_additions`, `get_agreement_count_by_type`, `get_client_mrr`, `get_aging_invoices`, `get_opportunities`, `create_opportunity`
 
-## Claude Desktop / Claude Code configuration
+## Client configuration
 
-The server runs over HTTP. Add it to your MCP client config:
+**HTTP mode** — Claude Desktop, Claude Code (server runs persistently):
 
-**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on Mac, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
-
+`claude_desktop_config.json` / `.claude/settings.json`:
 ```json
 {
   "mcpServers": {
     "connectwise": {
       "type": "http",
       "url": "http://localhost:8085/mcp",
-      "headers": {
-        "Authorization": "Bearer your_token_here"
-      }
+      "headers": { "Authorization": "Bearer your_token_here" }
     }
   }
 }
 ```
 
-Omit the `headers` block if you did not set `MCP_AUTH_TOKEN`.
-
-**Claude Code** (`.claude/settings.json` in your project, or `~/.claude/settings.json` globally):
+**stdio mode** — Cursor, VS Code, Zed, Continue, or any stdio client (server spawned per-session):
 
 ```json
 {
   "mcpServers": {
     "connectwise": {
-      "type": "http",
-      "url": "http://localhost:8085/mcp"
+      "command": "uvx",
+      "args": ["connectwise-mcp"],
+      "env": {
+        "CW_BASE_URL": "https://na.myconnectwise.net/v4_6_release/apis/3.0",
+        "CW_COMPANY_ID": "yourcompanyid",
+        "CW_PUBLIC_KEY": "your_public_key",
+        "CW_PRIVATE_KEY": "your_private_key",
+        "CW_CLIENT_ID": "your_client_id",
+        "MCP_TRANSPORT": "stdio"
+      }
     }
   }
 }
