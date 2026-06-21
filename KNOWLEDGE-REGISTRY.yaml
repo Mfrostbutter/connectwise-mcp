@@ -1,0 +1,49 @@
+# machine-readable navigation index — agents read this, humans read README.md
+meta:
+  domain: connectwise-mcp (ConnectWise Live MCP server, root)
+  last_updated: "2026-06-15"
+  purpose: Wayfinding index for the ConnectWise Manage MCP server — a standalone, published product.
+  canonical_home: "GitHub Mfrostbutter/connectwise-mcp + PyPI connectwise-mcp. Vendored into Agenius-AI-Labs as a git submodule."
+  product: "FastMCP server wrapping the ConnectWise Manage REST API. 45 tools across Service, Operations, Finance. Finance gated behind CW_TIER."
+
+read_first:
+  - path: README.md
+    note: Install (uvx/pip/source), transport modes, env vars, full tool list, client config, service unit.
+  - path: server.py
+    note: Single-file implementation. _JUNK_PRODUCTS allowlist + tier gating live at the top.
+  - path: .env.example
+    note: Required CW_* credentials and optional MCP_AUTH_TOKEN / port.
+
+layout:
+  - path: server.py
+    what: The MCP server implementation (all tools).
+  - path: requirements.txt
+    what: Runtime dependencies.
+  - path: pyproject.toml
+    what: Packaging metadata (uvx/pip entry point connectwise-mcp).
+  - path: README.md
+    what: Product documentation.
+  - path: LICENSE
+    what: MIT.
+
+interface:
+  transport: "http (default, port 8085) or stdio (MCP_TRANSPORT=stdio)"
+  tiers: "CW_TIER=leadership (all tools, incl. finance) | CW_TIER=tech (no finance)"
+  tool_domains: [Service, Operations, Finance]
+
+hard_rules:
+  - rule: "Standalone marketplace product — README/spec it as such, never offload features to private infra."
+    ref: memory feedback_apify_actors_are_products
+  - rule: "Never hardcode CW credentials. Env vars or .env only."
+  - rule: No em dashes.
+    ref: memory feedback_no_em_dashes
+
+siblings:
+  - path: "../connectwise-sell/KNOWLEDGE-REGISTRY.yaml"
+    note: Companion ConnectWise Sell (Quosal) MCP server.
+  - path: "../../../KNOWLEDGE-REGISTRY.yaml"
+    note: "Agenius-AI-Labs root registry (this repo is vendored there as a submodule)."
+
+maintenance:
+  - Update when tools are added/removed or the tier split changes.
+  - Keep in sync with README.md tool counts and env-var table.
